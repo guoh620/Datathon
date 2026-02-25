@@ -370,7 +370,7 @@ def model_probs_on_features(df_sub: pd.DataFrame, theta):
 
 def nll_over_features(theta, user_set, max_rows=None):
     LL_sum = 0.0
-    N_total = 0
+    total_trials = 0.0     # <-- count trials, not rows
 
     for chunk in pd.read_csv(FEATURE_FILE, chunksize=CHUNK_SIZE):
 
@@ -401,17 +401,21 @@ def nll_over_features(theta, user_set, max_rows=None):
             if len(P_t) == 0:
                 continue
 
+        # Binomial log-likelihood for each row
         logY = m * np.log(P_t) + (n - m) * np.log(1 - P_t)
-        LL_sum += logY.sum()
-        N_total += len(P_t)
 
-        if max_rows is not None and N_total >= max_rows:
+        LL_sum += logY.sum()
+        total_trials += n.sum()       # <-- accumulate trials, not rows
+
+        # Stopping criterion for faster training
+        if max_rows is not None and total_trials >= max_rows:
             break
 
-    if N_total == 0:
-        raise RuntimeError("No rows found for given user_set in feature file.")
+    if total_trials == 0:
+        raise RuntimeError("No trials found for given user_set in feature file.")
 
-    return -LL_sum / N_total
+    # Return NLL PER TRIAL
+    return -LL_sum / total_trials
 
 
 # ================== FIT z AND HALF-LIFE h ==================
@@ -419,7 +423,7 @@ def nll_over_features(theta, user_set, max_rows=None):
 print("Fitting z and half-life h on training users (using subsample for speed)...")
 
 theta0 = np.array([5.0, 24.0])   # [z, h_half]
-bounds = [(1e-3, 100.0), (1e-3, 20000.0)]
+bounds = [(1e-3, 100.0), (1e-3, 50000.0)]
 
 def objective(theta):
     if USE_SUBSAMPLE_FOR_TRAINING:
